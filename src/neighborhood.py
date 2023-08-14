@@ -62,7 +62,7 @@ def get_nbhd(spec, dataset_api: dict) -> list:
                 #model_spec.hash = model_spec.hash_spec(OPS)
                 nbhd.append(model_spec)
     
-    random.shuffle(nbhd)
+    #random.shuffle(nbhd)
     
     
     
