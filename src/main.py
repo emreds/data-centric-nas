@@ -1,36 +1,14 @@
 import copy
-import random
-
-from naslib.search_spaces.nasbench101.graph import is_valid_edge, is_valid_vertex
-import logging
-
+import os
 import pickle
-import sys
-import time
-
-from naslib.search_spaces import (
-    SimpleCellSearchSpace,
-    NasBench101SearchSpace,
-    HierarchicalSearchSpace,
-)
-from naslib.search_spaces.nasbench101 import graph
-
-from naslib.utils import get_dataset_api
-
-from naslib.search_spaces.nasbench101.encodings import EncodingType
-from naslib.search_spaces.nasbench101 import encodings
-
-import numpy as np
-import pandas as pd
-import xgboost as xgb
-
-from sklearn.preprocessing import MinMaxScaler
-
-from schema import ArchCoupled
-import surrogate_front
-import neighborhood
 from collections import deque
+
+import model
+import neighborhood
 import plot
+import surrogate_front
+from naslib.utils import get_dataset_api
+from schema import ArchCoupled
 
 
 # I am creating class based on architecture because I want to keep many data for every pass.
@@ -104,32 +82,45 @@ class ParetoLocalSearch:
         return sol1.val_accuracy >= sol2.val_accuracy and sol1.train_time <= sol2.train_time
 
 
+def load_models(train_time_path, acc_path):
+    # Load the XGBoost model from the pickle file
+    with open(train_time_path, 'rb') as file:
+        time_model = pickle.load(file)
+        
+    with open(acc_path, 'rb') as file:
+        acc_model = pickle.load(file)
+        
+    return time_model, acc_model
 
 if __name__ == "__main__":
     dataset_api = get_dataset_api("nasbench101", "cifar10")
-    train_time_model_path = "/p/project/hai_nasb_eo/emre/data_centric/NASLib/naslib/runners/predictors/xgb_model_cifar10_1000_seed_12_train_time.pkl"
-    acc_model_path = "/p/project/hai_nasb_eo/emre/data_centric/NASLib/naslib/runners/predictors/xgb_model_cifar10_1000_seed_12_val_accuracy.pkl"
-
+    # Model Name
+    # /xgb_model_cifar10_300_seed_17_val_accuracy.pkl
     
-    # Load the XGBoost model from the pickle file
-    with open(train_time_model_path, 'rb') as file:
-        time_model = pickle.load(file)
+    model_paths = os.listdir("../models")
+    model_paths.sort()
+    model_paths = [os.path.join("../models", file) for file in model_paths]
+    
+    size_models = {}
+    for model_path in model_paths:
+        surr_model = model.Model(model_path)
+        size_models[surr_model.data_size][surr_model.seed][surr_model.metric] = surr_model
         
-    with open(acc_model_path, 'rb') as file:
-        acc_model = pickle.load(file)
-        
-    # Get the surrogate front
-    surrogate_front = surrogate_front.get_surrogate_front(dataset_api, acc_model, time_model)
     
-    paretos = []
-    for arch in surrogate_front:
-        starting_arch = ArchCoupled(arch, dataset_api["nb101_data"])
-        PLS = ParetoLocalSearch(starting_arch, 100, dataset_api)
-        pareto_ls = PLS.search()
-        paretos += pareto_ls
-    
-    full_front = PLS._find_non_dominated_solutions(paretos)
-    plot.plot_pareto_front(full_front, path="pareto_front_pls.png")
+    for size in size_models:
+        for seed in size_models[size]:
+            # Get the surrogate front
+            surrogate_front = surrogate_front.get_surrogate_front(dataset_api, size_models[size]["val_accuracy"].model, size_models[size]["train_time"].model)
+            os.mkdir(f"../analysis/{size}/{seed}")
+            paretos = []
+            for arch in surrogate_front:
+                starting_arch = ArchCoupled(arch, dataset_api["nb101_data"])
+                PLS = ParetoLocalSearch(starting_arch, 100, dataset_api)
+                pareto_ls = PLS.search()
+                paretos += pareto_ls
+            
+            full_front = PLS._find_non_dominated_solutions(paretos)
+            plot.plot_pareto_front(full_front, path="pareto_front_pls.png")
 
     
 # First get the non dominated neighbours + current arch.
