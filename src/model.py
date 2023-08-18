@@ -14,7 +14,7 @@ class Model:
         self.dataset = attributes[2]
         self.data_size = int(attributes[3])
         self.seed = int(attributes[5])
-        self.metric = attributes[6] + '_' + attributes[7]
+        self.metric = attributes[6] + '_' + (attributes[7].split('.')[0])
         
     @staticmethod
     def load_model(model_path):

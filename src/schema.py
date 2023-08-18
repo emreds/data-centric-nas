@@ -18,3 +18,15 @@ class ArchCoupled:
         self.trainable_parameters = fixed_stats['trainable_parameters']
         
         self.spec = {'module_adjacency': self.module_adjacency, 'module_operations': self.module_operations}
+
+    
+    def __json__(self): 
+        return {
+            "train_accuracy": self.train_accuracy, 
+            "validation_accuracy": self.val_accuracy,
+            "test_accuracy": self.test_accuracy, 
+            "train_time": self.train_time, 
+            "hash": self.hash, 
+            "spec": {'module_adjacency': self.module_adjacency.tolist(), 'module_operations': self.module_operations}
+
+        }
