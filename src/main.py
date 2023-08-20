@@ -134,11 +134,18 @@ def multi_surrogate_PLS(size_models: Dict,
                    dataset_api: Dict,
                    pareto_steps:int,
                    starting_points:int,
+                   min_max_dict: Dict,
                    result_dir: Path = Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis")
                    ) -> None:
     
     for size in size_models:
-        surrogate_PLS(size_models=size_models, dataset_api=dataset_api, size=size, pareto_steps=pareto_steps, starting_points=starting_points, result_dir=result_dir)
+        surrogate_PLS(size_models=size_models,
+                      dataset_api=dataset_api,
+                      size=size,
+                      pareto_steps=pareto_steps,
+                      starting_points=starting_points,
+                      min_max_dict=min_max_dict,
+                      result_dir=result_dir)
         
     pass
     
@@ -148,35 +155,27 @@ def surrogate_PLS(size_models: Dict,
              size:int,
              pareto_steps:int,
              starting_points:int,
+             min_max_dict: Dict,
              result_dir: Path = Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis")
              ) -> None:
     
-    min_max_dict = metrics.get_min_max_values(dataset_api["nb101_data"])
+    
     for seed in size_models[size]:
-        total_trained_arch = 0
         # Get the surrogate front
-        surrogate_front = sf.get_surrogate_front(dataset_api, size_models[size][seed]["val_accuracy"].model, size_models[size][seed]["train_time"].model, min_max_dict)
+        surrogate_front = sf.get_surrogate_front(dataset_api, size_models[size][seed]["val_accuracy"].model, size_models[size][seed]["train_time"].model)
         np.random.seed(seed)
-        surrogate_front = np.random.choice(surrogate_front, size=starting_points, replace=False)
+        if len(surrogate_front) > starting_points:
+            surrogate_front = np.random.choice(surrogate_front, size=starting_points, replace=False)
+        else: 
+            print(f"Surrogate front size is smaller than starting points. For the size: {size} and seed: {seed} Surrogate front size: {len(surrogate_front)}")
+        
         search_res_dir = result_dir / str(size) / str(seed)
-        if not os.path.exists(search_res_dir):
-            os.makedirs(search_res_dir)
-        paretos = []
-        
-        for i, arch in enumerate(surrogate_front):
-            starting_arch = ArchCoupled(arch, dataset_api["nb101_data"])
-            PLS = ParetoLocalSearch(starting_arch, pareto_steps, dataset_api)
-            pareto_ls = PLS.search()
-            paretos += pareto_ls
-            total_trained_arch += PLS.trained_arch_cnt
-            write_pls_history(pls=PLS, path=search_res_dir, start_point_id=i+1)
-        
-        full_front = PLS._find_non_dominated_solutions(paretos)
-        
-        pareto_metrics = metrics.ParetoMetrics(full_front, min_max=min_max_dict, trained_arch_cnt=total_trained_arch)
-        
-        write_pareto_metrics(pareto_metrics, path=search_res_dir)
-        plot.plot_pareto_front(pareto_front=full_front, min_max=min_max_dict, path=search_res_dir / "pareto_front.png")
+        print(f"Making surrogate MO for size {size} and seed {seed} and len(surrogate_front): {len(surrogate_front)}")
+        make_PLS(search_res_dir=search_res_dir,
+                 starting_archs=surrogate_front,
+                 pareto_steps=pareto_steps,
+                 min_max_dict=min_max_dict,
+                 )
         
     pass
     
@@ -209,6 +208,7 @@ def make_PLS(search_res_dir: Path, starting_archs: List[str], pareto_steps: int,
 def run_surrogate_PLS(
     pareto_steps:int, 
     starting_points:int,
+    min_max_dict: Dict,
     model_dir: str = "../surrogates/models",
     result_dir:Path = Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis/surrogates")
     ):
@@ -229,6 +229,7 @@ def run_surrogate_PLS(
                         dataset_api=dataset_api,
                         result_dir=result_dir,
                         pareto_steps=pareto_steps,
+                        min_max_dict=min_max_dict,
                         starting_points=starting_points
                         )
 
@@ -236,6 +237,8 @@ def run_surrogate_PLS(
 def raw_MO(dataset_api: Dict, random_seed: int, min_max_dict: Dict, starting_points: int, pareto_steps: int, search_res_dir:Path) -> None:
         np.random.seed(seed=random_seed)
         raw_MO_archs = np.random.choice(list(dataset_api["nb101_data"].fixed_statistics.keys()), size=starting_points, replace=False)
+        print(f"Making raw MO for seed {random_seed} and starting points {starting_points}")
+        
         make_PLS(
             search_res_dir=search_res_dir,
             starting_archs=raw_MO_archs,
@@ -264,18 +267,19 @@ if __name__ == "__main__":
     dataset_api = get_dataset_api("nasbench101", "cifar10")
     min_max_dict=metrics.get_min_max_values(dataset_api["nb101_data"])
     random_seeds = [17, 21, 42, 81, 123]
+    '''
     multi_raw_MO_PLS(dataset_api=dataset_api,
                      min_max_dict=min_max_dict,
                      random_seeds=random_seeds,
                      starting_points=STARTING_POINTS,
-                     pareto_steps=PARETO_STEPS,
+                     pareto_steps=PARETO_STEPS+2,
                      result_dir=Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis/raw_mo")
                      )
-    
-    
-    
-    
-        
-
-    
-        
+    '''
+    run_surrogate_PLS(
+        pareto_steps=PARETO_STEPS,
+        starting_points=STARTING_POINTS,
+        min_max_dict=min_max_dict,
+        result_dir=Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis/surrogates"),
+        model_dir="../surrogates/models"
+        )
