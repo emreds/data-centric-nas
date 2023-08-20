@@ -267,7 +267,7 @@ if __name__ == "__main__":
     dataset_api = get_dataset_api("nasbench101", "cifar10")
     min_max_dict=metrics.get_min_max_values(dataset_api["nb101_data"])
     random_seeds = [17, 21, 42, 81, 123]
-    '''
+    
     multi_raw_MO_PLS(dataset_api=dataset_api,
                      min_max_dict=min_max_dict,
                      random_seeds=random_seeds,
@@ -275,7 +275,7 @@ if __name__ == "__main__":
                      pareto_steps=PARETO_STEPS+2,
                      result_dir=Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis/raw_mo")
                      )
-    '''
+    
     run_surrogate_PLS(
         pareto_steps=PARETO_STEPS,
         starting_points=STARTING_POINTS,
