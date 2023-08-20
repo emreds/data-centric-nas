@@ -1,7 +1,9 @@
 import copy
 import random
 
-from naslib.search_spaces.nasbench101.graph import is_valid_edge, is_valid_vertex
+import numpy as np
+from naslib.search_spaces.nasbench101.graph import (is_valid_edge,
+                                                    is_valid_vertex)
 from schema import ArchCoupled
 
 NUM_VERTICES = 7
@@ -10,6 +12,8 @@ CONV3X3 = "conv3x3-bn-relu"
 CONV1X1 = "conv1x1-bn-relu"
 MAXPOOL3X3 = "maxpool3x3"
 OPS = [CONV3X3, CONV1X1, MAXPOOL3X3]
+INPUT = "input"
+OUTPUT = "output"
 
 
 def format_neighbors(neighbors, dataset_api):
@@ -67,3 +71,27 @@ def get_nbhd(spec, dataset_api: dict) -> list:
     
     
     return format_neighbors(nbhd, dataset_api)
+
+def sample_random_architecture(self, dataset_api: dict, seed: int) -> None:
+        """
+        This will sample a random architecture and update the edges in the
+        naslib object accordingly.
+        From the NASBench repository:
+        one-hot adjacency matrix
+        draw [0,1] for each slot in the adjacency matrix
+        """
+        
+        np.random.seed(seed)
+        
+        while True:
+            matrix = np.random.choice([0, 1], size=(NUM_VERTICES, NUM_VERTICES))
+            matrix = np.triu(matrix, 1)
+            ops = np.random.choice(OPS, size=NUM_VERTICES).tolist()
+            ops[0] = INPUT
+            ops[-1] = OUTPUT
+
+            spec = dataset_api["api"].ModelSpec(matrix=matrix, ops=ops)
+            if dataset_api["nb101_data"].is_valid(spec):
+                break
+
+        set_spec({"matrix": matrix, "ops": ops})

@@ -4,14 +4,19 @@ import os
 import pickle
 from collections import defaultdict, deque
 from pathlib import Path
+from typing import Dict, List
 
+import metrics
 import model
 import neighborhood
+import numpy as np
 import plot
 import surrogate_front as sf
-from metrics import ParetoMetrics
 from naslib.utils import get_dataset_api
 from schema import ArchCoupled
+
+STARTING_POINTS = 20
+PARETO_STEPS = 20
 
 
 # I am creating class based on architecture because I want to keep many data for every pass.
@@ -70,7 +75,7 @@ class ParetoLocalSearch:
         for sol1 in pareto_front:
             is_dominated_by_others = False
             for sol2 in pareto_front:
-                if sol1 != sol2 and self._is_dominated(sol2, sol1):
+                if sol1 != sol2 and self._is_dominated(sol1, sol2):
                     is_dominated_by_others = True
                     break
 
@@ -82,7 +87,17 @@ class ParetoLocalSearch:
     
     @staticmethod
     def _is_dominated(sol1, sol2):
-        return sol1.val_accuracy >= sol2.val_accuracy and sol1.train_time <= sol2.train_time
+        """
+        Checks if sol1 dominated by the sol2.
+
+        Args:
+            sol1 (_type_)
+            sol2 (_type_)
+            
+        Returns:
+            bool
+        """
+        return sol2.val_accuracy >= sol1.val_accuracy and sol2.train_time <= sol1.train_time
 
 
 def load_models(train_time_path, acc_path):
@@ -95,7 +110,7 @@ def load_models(train_time_path, acc_path):
         
     return time_model, acc_model
 
-def write_pareto_metrics(pareto_metrics: ParetoMetrics, path: Path) -> None:
+def write_pareto_metrics(pareto_metrics: metrics.ParetoMetrics, path: Path) -> None:
     
     json_file_path = path / "pareto_metrics.json"
     
@@ -113,45 +128,36 @@ def write_pls_history(pls: ParetoLocalSearch, path: Path, start_point_id: int) -
         json.dump(history, file, default=lambda o: o.__json__(), indent=4)
     
     pass
-# Check out the inside of full_front
-def make_pls(size_models, result_dir = Path("../analysis")) -> None:
+
+
+def multi_surrogate_PLS(size_models: Dict,
+                   dataset_api: Dict,
+                   pareto_steps:int,
+                   starting_points:int,
+                   result_dir: Path = Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis")
+                   ) -> None:
     
-        for size in size_models:
-            if not os.path.exists(result_dir / size):
-                os.mkdir(result_dir / size)
-            total_trained_arch = 0
-            for seed in size_models[size]:
-                # Get the surrogate front
-                surrogate_front
-                surrogate_front = sf.get_surrogate_front(dataset_api, size_models[size]["val_accuracy"].model, size_models[size]["train_time"].model)
-                search_res_dir = result_dir / size / seed
-                if not os.path.exists(search_res_dir):
-                    os.mkdir(search_res_dir)
-                paretos = []
-                
-                for i, arch in enumerate(surrogate_front):
-                    starting_arch = ArchCoupled(arch, dataset_api["nb101_data"])
-                    PLS = ParetoLocalSearch(starting_arch, 100, dataset_api)
-                    pareto_ls = PLS.search()
-                    paretos += pareto_ls
-                    total_trained_arch += PLS.trained_arch_cnt
-                    write_pls_history(pls=PLS, path=search_res_dir, start_point_id=i+1)
-                
-                full_front = PLS._find_non_dominated_solutions(paretos)
-                #pareto_metrics = ParetoMetrics(full_front)
-                
-                #write_pareto_metrics(pareto_metrics, path=search_res_dir)
-                plot.plot_pareto_front(full_front, path = search_res_dir / "pareto_front_pls.png")
-        pass
+    for size in size_models:
+        surrogate_PLS(size_models=size_models, dataset_api=dataset_api, size=size, pareto_steps=pareto_steps, starting_points=starting_points, result_dir=result_dir)
+        
+    pass
     
-def demo_make_pls(size_models, result_dir = Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis"), size=300, pareto_steps=20):
     
-    #size_models = size_models[300]
-    #size = 300
-    total_trained_arch = 0
+def surrogate_PLS(size_models: Dict,
+             dataset_api: Dict,
+             size:int,
+             pareto_steps:int,
+             starting_points:int,
+             result_dir: Path = Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis")
+             ) -> None:
+    
+    min_max_dict = metrics.get_min_max_values(dataset_api["nb101_data"])
     for seed in size_models[size]:
+        total_trained_arch = 0
         # Get the surrogate front
-        surrogate_front = sf.get_surrogate_front(dataset_api, size_models[size][seed]["val_accuracy"].model, size_models[size][seed]["train_time"].model)
+        surrogate_front = sf.get_surrogate_front(dataset_api, size_models[size][seed]["val_accuracy"].model, size_models[size][seed]["train_time"].model, min_max_dict)
+        np.random.seed(seed)
+        surrogate_front = np.random.choice(surrogate_front, size=starting_points, replace=False)
         search_res_dir = result_dir / str(size) / str(seed)
         if not os.path.exists(search_res_dir):
             os.makedirs(search_res_dir)
@@ -166,43 +172,110 @@ def demo_make_pls(size_models, result_dir = Path("/p/project/hai_nasb_eo/emre/da
             write_pls_history(pls=PLS, path=search_res_dir, start_point_id=i+1)
         
         full_front = PLS._find_non_dominated_solutions(paretos)
-        #pareto_metrics = ParetoMetrics(full_front)
         
-        #write_pareto_metrics(pareto_metrics, path=search_res_dir)
-        plot.plot_pareto_front(full_front, path = search_res_dir / "pareto_front.png")
+        pareto_metrics = metrics.ParetoMetrics(full_front, min_max=min_max_dict, trained_arch_cnt=total_trained_arch)
+        
+        write_pareto_metrics(pareto_metrics, path=search_res_dir)
+        plot.plot_pareto_front(pareto_front=full_front, min_max=min_max_dict, path=search_res_dir / "pareto_front.png")
         
     pass
     
 
-if __name__ == "__main__":
-    dataset_api = get_dataset_api("nasbench101", "cifar10")
+def make_PLS(search_res_dir: Path, starting_archs: List[str], pareto_steps: int, min_max_dict: Dict) -> int:
+    
+    if not os.path.exists(search_res_dir):
+        os.makedirs(search_res_dir)
+    
+    paretos = []
+    #min_max_dict = metrics.get_min_max_values(dataset_api["nb101_data"])
+    trained_arch_cnt = 0
+    for i, arch in enumerate(starting_archs):
+        starting_arch = ArchCoupled(arch, dataset_api["nb101_data"])
+        PLS = ParetoLocalSearch(starting_arch, pareto_steps, dataset_api)
+        pareto_ls = PLS.search()
+        paretos += pareto_ls
+        trained_arch_cnt += PLS.trained_arch_cnt
+        write_pls_history(pls=PLS, path=search_res_dir, start_point_id=i+1)
+    
+    full_front = PLS._find_non_dominated_solutions(paretos)
+    
+    pareto_metrics = metrics.ParetoMetrics(full_front, min_max=min_max_dict, trained_arch_cnt=trained_arch_cnt)
+    
+    write_pareto_metrics(pareto_metrics, path=search_res_dir)
+    plot.plot_pareto_front(pareto_front=full_front, min_max=min_max_dict, path=search_res_dir / "pareto_front.png")
+    
+    return trained_arch_cnt
+    
+def run_surrogate_PLS(
+    pareto_steps:int, 
+    starting_points:int,
+    model_dir: str = "../surrogates/models",
+    result_dir:Path = Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis/surrogates")
+    ):
+
+    model_paths = os.listdir(model_dir)
+    model_paths.sort()
+    model_paths = [os.path.join(model_dir, file) for file in model_paths]
+    
+    #surr_models = [model.Model(model_path) for model_path in model_paths]
     # Model Name
     # /xgb_model_cifar10_300_seed_17_val_accuracy.pkl
-    
-    model_paths = os.listdir("../surrogates/models")
-    model_paths.sort()
-    model_paths = [os.path.join("../surrogates/models", file) for file in model_paths]
-    
-    surr_models = [model.Model(model_path) for model_path in model_paths]
-
     size_models = defaultdict(lambda: defaultdict(dict))
     for model_path in model_paths:
         surr_model = model.Model(model_path)
         size_models[surr_model.data_size][surr_model.seed][surr_model.metric] = surr_model
         
-    demo_make_pls(size_models=size_models, size=1000)
+    multi_surrogate_PLS(size_models=size_models,
+                        dataset_api=dataset_api,
+                        result_dir=result_dir,
+                        pareto_steps=pareto_steps,
+                        starting_points=starting_points
+                        )
+
+
+def raw_MO(dataset_api: Dict, random_seed: int, min_max_dict: Dict, starting_points: int, pareto_steps: int, search_res_dir:Path) -> None:
+        np.random.seed(seed=random_seed)
+        raw_MO_archs = np.random.choice(list(dataset_api["nb101_data"].fixed_statistics.keys()), size=starting_points, replace=False)
+        make_PLS(
+            search_res_dir=search_res_dir,
+            starting_archs=raw_MO_archs,
+            pareto_steps=pareto_steps,
+            min_max_dict=min_max_dict,
+            )
         
-        
-    #print(size_models)
-    # 300,400,500
+        pass
+
+def multi_raw_MO_PLS(dataset_api: Dict, min_max_dict: Dict, random_seeds: List[int], starting_points: int, pareto_steps: int, result_dir:Path) -> None:
+    
+    for seed in random_seeds:
+        search_res_dir = result_dir / str(seed)
+        raw_MO(dataset_api=dataset_api,
+               random_seed=seed,
+               min_max_dict=min_max_dict,
+               starting_points=starting_points,
+               pareto_steps=pareto_steps,
+               search_res_dir=search_res_dir
+            )
+    
+    pass
     
 
+if __name__ == "__main__":
+    dataset_api = get_dataset_api("nasbench101", "cifar10")
+    min_max_dict=metrics.get_min_max_values(dataset_api["nb101_data"])
+    random_seeds = [17, 21, 42, 81, 123]
+    multi_raw_MO_PLS(dataset_api=dataset_api,
+                     min_max_dict=min_max_dict,
+                     random_seeds=random_seeds,
+                     starting_points=STARTING_POINTS,
+                     pareto_steps=PARETO_STEPS,
+                     result_dir=Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis/raw_mo")
+                     )
     
-# First get the non dominated neighbours + current arch.
-# Then, compare them with the archive.
-# Remove the dominated ones from the archive.
-# Create folder name with data size, and save the plot there. 
-# Add plot of pareto front metrics. 
-# Parse the archive. 
-# For the archive, check the average acc and training time and plot it with every step. 
-# Add the non dominated ones to the archive and iter_queue.
+    
+    
+    
+        
+
+    
+        
