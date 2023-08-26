@@ -220,11 +220,8 @@ def run_surrogate_PLS(
     #surr_models = [model.Model(model_path) for model_path in model_paths]
     # Model Name
     # /xgb_model_cifar10_300_seed_17_val_accuracy.pkl
-    size_models = defaultdict(lambda: defaultdict(dict))
-    for model_path in model_paths:
-        surr_model = model.Model(model_path)
-        size_models[surr_model.data_size][surr_model.seed][surr_model.metric] = surr_model
-        
+    size_models = get_size_models(model_paths)
+    
     multi_surrogate_PLS(size_models=size_models,
                         dataset_api=dataset_api,
                         result_dir=result_dir,
@@ -233,6 +230,18 @@ def run_surrogate_PLS(
                         starting_points=starting_points
                         )
 
+
+def get_size_models(model_dir: Path) -> Dict:
+    model_paths = os.listdir(model_dir)
+    model_paths.sort()
+    model_paths = [os.path.join(model_dir, file) for file in model_paths]
+    
+    size_models = defaultdict(lambda: defaultdict(dict))
+    for model_path in model_paths:
+        surr_model = model.Model(model_path)
+        size_models[surr_model.data_size][surr_model.seed][surr_model.metric] = surr_model
+        
+    return size_models
 
 def raw_MO(dataset_api: Dict, random_seed: int, min_max_dict: Dict, starting_points: int, pareto_steps: int, search_res_dir:Path) -> None:
         np.random.seed(seed=random_seed)
@@ -267,6 +276,7 @@ if __name__ == "__main__":
     dataset_api = get_dataset_api("nasbench101", "cifar10")
     min_max_dict=metrics.get_min_max_values(dataset_api["nb101_data"])
     random_seeds = [17, 21, 42, 81, 123]
+    size_models = get_size_models(model_dir="../surrogates/models")
     
     multi_raw_MO_PLS(dataset_api=dataset_api,
                      min_max_dict=min_max_dict,
@@ -283,3 +293,4 @@ if __name__ == "__main__":
         result_dir=Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis/surrogates"),
         model_dir="../surrogates/models"
         )
+    
