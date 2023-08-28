@@ -12,8 +12,9 @@ import neighborhood
 import numpy as np
 import plot
 import surrogate_front as sf
-from naslib.utils import get_dataset_api
 from schema import ArchCoupled
+
+from naslib.utils import get_dataset_api
 
 STARTING_POINTS = 20
 PARETO_STEPS = 20
@@ -213,14 +214,8 @@ def run_surrogate_PLS(
     result_dir:Path = Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis/surrogates")
     ):
 
-    model_paths = os.listdir(model_dir)
-    model_paths.sort()
-    model_paths = [os.path.join(model_dir, file) for file in model_paths]
-    
-    #surr_models = [model.Model(model_path) for model_path in model_paths]
-    # Model Name
-    # /xgb_model_cifar10_300_seed_17_val_accuracy.pkl
-    size_models = get_size_models(model_paths)
+
+    size_models = get_size_models(model_dir=model_dir)
     
     multi_surrogate_PLS(size_models=size_models,
                         dataset_api=dataset_api,
@@ -277,20 +272,28 @@ if __name__ == "__main__":
     min_max_dict=metrics.get_min_max_values(dataset_api["nb101_data"])
     random_seeds = [17, 21, 42, 81, 123]
     size_models = get_size_models(model_dir="../surrogates/models")
+    raw_mo_steps = PARETO_STEPS
+    raw_mo_result_path = Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis/raw_mo") / str(raw_mo_steps)
+    surrogate_mo_result_path = Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis/surrogates") / str(PARETO_STEPS)
+    print(raw_mo_result_path)
     
-    multi_raw_MO_PLS(dataset_api=dataset_api,
-                     min_max_dict=min_max_dict,
-                     random_seeds=random_seeds,
-                     starting_points=STARTING_POINTS,
-                     pareto_steps=PARETO_STEPS+2,
-                     result_dir=Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis/raw_mo")
-                     )
+    for i in [0, 1, 3]: 
+        raw_mo_steps = PARETO_STEPS + i
+        raw_mo_result_path = Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis/raw_mo") / str(raw_mo_steps)
+        multi_raw_MO_PLS(dataset_api=dataset_api,
+                        min_max_dict=min_max_dict,
+                        random_seeds=random_seeds,
+                        starting_points=STARTING_POINTS,
+                        pareto_steps=raw_mo_steps,
+                        result_dir=raw_mo_result_path
+                        )
     
+    '''
     run_surrogate_PLS(
         pareto_steps=PARETO_STEPS,
         starting_points=STARTING_POINTS,
         min_max_dict=min_max_dict,
-        result_dir=Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis/surrogates"),
-        model_dir="../surrogates/models"
+        result_dir=surrogate_mo_result_path,
+        model_dir=Path("../surrogates/models")
         )
-    
+    '''
