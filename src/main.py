@@ -57,7 +57,7 @@ class ParetoLocalSearch:
                         self.archive.append(nei)
                         self.iter_queue.append(nei)
 
-            print(f"This is archive length for step {i+1}: {len(self.archive)}")
+            #print(f"This is archive length for step {i+1}: {len(self.archive)}")
         
             i += 1
             
@@ -241,6 +241,7 @@ def get_size_models(model_dir: Path) -> Dict:
 def raw_MO(dataset_api: Dict, random_seed: int, min_max_dict: Dict, starting_points: int, pareto_steps: int, search_res_dir:Path) -> None:
         np.random.seed(seed=random_seed)
         raw_MO_archs = np.random.choice(list(dataset_api["nb101_data"].fixed_statistics.keys()), size=starting_points, replace=False)
+        #print(f"Raw MO archs: {raw_MO_archs}")
         print(f"Making raw MO for seed {random_seed} and starting points {starting_points}")
         
         make_PLS(
@@ -270,14 +271,15 @@ def multi_raw_MO_PLS(dataset_api: Dict, min_max_dict: Dict, random_seeds: List[i
 if __name__ == "__main__":
     dataset_api = get_dataset_api("nasbench101", "cifar10")
     min_max_dict=metrics.get_min_max_values(dataset_api["nb101_data"])
-    random_seeds = [17, 21, 42, 81, 123]
+    random_seeds = list(range(1, 300, 10))
     size_models = get_size_models(model_dir="../surrogates/models")
     raw_mo_steps = PARETO_STEPS
     raw_mo_result_path = Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis/raw_mo") / str(raw_mo_steps)
     surrogate_mo_result_path = Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis/surrogates") / str(PARETO_STEPS)
     print(raw_mo_result_path)
     
-    for i in [0, 1, 3]: 
+    # We make 1 to 5 steps more for raw MO.
+    for i in [0, 1, 2, 3, 4, 5]: 
         raw_mo_steps = PARETO_STEPS + i
         raw_mo_result_path = Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis/raw_mo") / str(raw_mo_steps)
         multi_raw_MO_PLS(dataset_api=dataset_api,
@@ -288,7 +290,7 @@ if __name__ == "__main__":
                         result_dir=raw_mo_result_path
                         )
     
-    '''
+''' 
     run_surrogate_PLS(
         pareto_steps=PARETO_STEPS,
         starting_points=STARTING_POINTS,
@@ -296,4 +298,4 @@ if __name__ == "__main__":
         result_dir=surrogate_mo_result_path,
         model_dir=Path("../surrogates/models")
         )
-    '''
+'''
