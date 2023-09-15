@@ -12,9 +12,8 @@ import neighborhood
 import numpy as np
 import plot
 import surrogate_front as sf
-from schema import ArchCoupled
-
 from naslib.utils import get_dataset_api
+from schema import ArchCoupled
 
 STARTING_POINTS = 20
 PARETO_STEPS = 20
@@ -22,9 +21,10 @@ PARETO_STEPS = 20
 
 # I am creating class based on architecture because I want to keep many data for every pass.
 class ParetoLocalSearch:
-    def __init__(self, arch, iterations, dataset_api) -> None:
+    def __init__(self, arch, max_train_cnt, dataset_api) -> None:
         self.base_arch = arch
-        self.iterations = iterations
+        #self.iterations = iterations
+        self.max_train_cnt = max_train_cnt
         self.dataset_api = dataset_api
         self.archive = [arch]
         self.iter_queue = deque(self.archive)
@@ -34,9 +34,9 @@ class ParetoLocalSearch:
     
     
     def search(self):
-        i = 0 
+        step = 0 
         
-        while i < self.iterations:
+        while self.trained_arch_cnt < self.max_train_cnt:
             if len(self.iter_queue) > 0: 
                 step_arch = self.iter_queue.popleft()
                 nbhd = neighborhood.get_nbhd(step_arch.spec, self.dataset_api)
@@ -57,11 +57,11 @@ class ParetoLocalSearch:
                         self.archive.append(nei)
                         self.iter_queue.append(nei)
 
-            #print(f"This is archive length for step {i+1}: {len(self.archive)}")
+            #print(f"This is archive length for step {step+1}: {len(self.archive)}")
         
-            i += 1
+            step += 1
             
-            self.history[i] = [copy.deepcopy(arch) for arch in self.archive]
+            self.history[step] = [copy.deepcopy(arch) for arch in self.archive]
             
         print(f"Total trained architectures: {self.trained_arch_cnt}")
         
@@ -181,7 +181,7 @@ def surrogate_PLS(size_models: Dict,
     pass
     
 
-def make_PLS(search_res_dir: Path, starting_archs: List[str], pareto_steps: int, min_max_dict: Dict) -> int:
+def make_PLS(search_res_dir: Path, starting_archs: List[str], max_train_cnt: int, min_max_dict: Dict) -> int:
     
     if not os.path.exists(search_res_dir):
         os.makedirs(search_res_dir)
@@ -189,9 +189,10 @@ def make_PLS(search_res_dir: Path, starting_archs: List[str], pareto_steps: int,
     paretos = []
     #min_max_dict = metrics.get_min_max_values(dataset_api["nb101_data"])
     trained_arch_cnt = 0
+    str_point_train_cnt = max_train_cnt // len(starting_archs)
     for i, arch in enumerate(starting_archs):
         starting_arch = ArchCoupled(arch, dataset_api["nb101_data"])
-        PLS = ParetoLocalSearch(starting_arch, pareto_steps, dataset_api)
+        PLS = ParetoLocalSearch(starting_arch, str_point_train_cnt, dataset_api)
         pareto_ls = PLS.search()
         paretos += pareto_ls
         trained_arch_cnt += PLS.trained_arch_cnt
@@ -238,7 +239,7 @@ def get_size_models(model_dir: Path) -> Dict:
         
     return size_models
 
-def raw_MO(dataset_api: Dict, random_seed: int, min_max_dict: Dict, starting_points: int, pareto_steps: int, search_res_dir:Path) -> None:
+def raw_MO(dataset_api: Dict, random_seed: int, min_max_dict: Dict, starting_points: int, max_train_cnt: int, search_res_dir:Path) -> None:
         np.random.seed(seed=random_seed)
         raw_MO_archs = np.random.choice(list(dataset_api["nb101_data"].fixed_statistics.keys()), size=starting_points, replace=False)
         #print(f"Raw MO archs: {raw_MO_archs}")
@@ -247,13 +248,13 @@ def raw_MO(dataset_api: Dict, random_seed: int, min_max_dict: Dict, starting_poi
         make_PLS(
             search_res_dir=search_res_dir,
             starting_archs=raw_MO_archs,
-            pareto_steps=pareto_steps,
+            max_train_cnt=max_train_cnt,
             min_max_dict=min_max_dict,
             )
         
         pass
 
-def multi_raw_MO_PLS(dataset_api: Dict, min_max_dict: Dict, random_seeds: List[int], starting_points: int, pareto_steps: int, result_dir:Path) -> None:
+def multi_raw_MO_PLS(dataset_api: Dict, min_max_dict: Dict, random_seeds: List[int], starting_points: int, max_train_cnt: int, result_dir:Path) -> None:
     
     for seed in random_seeds:
         search_res_dir = result_dir / str(seed)
@@ -261,7 +262,7 @@ def multi_raw_MO_PLS(dataset_api: Dict, min_max_dict: Dict, random_seeds: List[i
                random_seed=seed,
                min_max_dict=min_max_dict,
                starting_points=starting_points,
-               pareto_steps=pareto_steps,
+               max_train_cnt=max_train_cnt,
                search_res_dir=search_res_dir
             )
     
@@ -271,7 +272,7 @@ def multi_raw_MO_PLS(dataset_api: Dict, min_max_dict: Dict, random_seeds: List[i
 if __name__ == "__main__":
     dataset_api = get_dataset_api("nasbench101", "cifar10")
     min_max_dict=metrics.get_min_max_values(dataset_api["nb101_data"])
-    random_seeds = list(range(1, 300, 10))
+    random_seeds = list(range(10,310,10))
     size_models = get_size_models(model_dir="../surrogates/models")
     raw_mo_steps = PARETO_STEPS
     raw_mo_result_path = Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis/raw_mo") / str(raw_mo_steps)
@@ -279,16 +280,17 @@ if __name__ == "__main__":
     print(raw_mo_result_path)
     
     # We make 1 to 5 steps more for raw MO.
-    for i in [0, 1, 2, 3, 4, 5]: 
-        raw_mo_steps = PARETO_STEPS + i
-        raw_mo_result_path = Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis/raw_mo") / str(raw_mo_steps)
-        multi_raw_MO_PLS(dataset_api=dataset_api,
-                        min_max_dict=min_max_dict,
-                        random_seeds=random_seeds,
-                        starting_points=STARTING_POINTS,
-                        pareto_steps=raw_mo_steps,
-                        result_dir=raw_mo_result_path
-                        )
+    #for i in [0, 1, 2, 3, 4, 5]: 
+    #raw_mo_steps = PARETO_STEPS + i
+    raw_mo_max_train = 4000
+    raw_mo_result_path = Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis/raw_mo/") / str(raw_mo_max_train)
+    multi_raw_MO_PLS(dataset_api=dataset_api,
+                    min_max_dict=min_max_dict,
+                    random_seeds=random_seeds,
+                    starting_points=STARTING_POINTS,
+                    max_train_cnt=raw_mo_max_train,
+                    result_dir=raw_mo_result_path
+                    )
     
 ''' 
     run_surrogate_PLS(
