@@ -10,8 +10,14 @@ from scipy.spatial.qhull import ConvexHull
 
 
 class ParetoMetrics:
-    def __init__(self, pareto_front: List[ArchCoupled], min_max: Dict, trained_arch_cnt: int) -> None:
-        self.trained_arch_cnt = trained_arch_cnt
+    def __init__(self, pareto_front: List[ArchCoupled], min_max: Dict) -> None:
+        """
+        Useful class for calculating pareto metrics.
+
+        Args:
+            pareto_front (List[ArchCoupled]): _description_
+            min_max (Dict): _description_
+        """
         pareto_front_values = np.array(list(zip([arch.val_accuracy for arch in pareto_front], [arch.train_time for arch in pareto_front])))
         self.hypervolume = self.get_hypervolume(pareto_front_values, min_max)
         self.avg_hypervolume = self.hypervolume / len(pareto_front)
@@ -77,20 +83,6 @@ class ParetoMetrics:
         norm_pareto_front = np.array(list(zip(norm_val_accuracy, norm_train_time)))
         hv_calculator = HV(ref_point=ref_point)
         hv = hv_calculator.do(norm_pareto_front)
-        
-        return hv
-    
-    @staticmethod
-    def get_hypervolume_old(pareto_front: np.array, min_max_dict: dict) -> float:
-        
-        val_accuracy = pareto_front[:, 0]
-        train_time = pareto_front[:, 1]
-        
-        norm_val_accuracy = normalize_values(values=val_accuracy,worst_value=min_max_dict['min_val_acc'],best_value=min_max_dict['max_val_acc'])
-        # Shorter training time is better, so we invert the values.
-        norm_train_time = normalize_values(values=train_time,worst_value=min_max_dict['max_train_time'],best_value=min_max_dict['min_train_time'])
-        
-        hv = np.sum(norm_val_accuracy * norm_train_time)
         
         return hv
         

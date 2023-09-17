@@ -1,105 +1,20 @@
-import copy
 import json
 import os
 import pickle
-from collections import defaultdict, deque
+from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List
 
 import metrics
 import model
-import neighborhood
 import numpy as np
 import plot
 import surrogate_front as sf
 from naslib.utils import get_dataset_api
+from pls import ParetoLocalSearch
 from schema import ArchCoupled
 
 STARTING_POINTS = 20
-PARETO_STEPS = 20
-
-
-# I am creating class based on architecture because I want to keep many data for every pass.
-class ParetoLocalSearch:
-    def __init__(self, arch, max_train_cnt, dataset_api) -> None:
-        self.base_arch = arch
-        #self.iterations = iterations
-        self.max_train_cnt = max_train_cnt
-        self.dataset_api = dataset_api
-        self.archive = [arch]
-        self.iter_queue = deque(self.archive)
-        self.arch_hashes = set([self.base_arch.hash])
-        self.trained_arch_cnt = 0
-        self.history = {0: [arch]}
-    
-    
-    def search(self):
-        step = 0 
-        
-        while self.trained_arch_cnt < self.max_train_cnt:
-            if len(self.iter_queue) > 0: 
-                step_arch = self.iter_queue.popleft()
-                nbhd = neighborhood.get_nbhd(step_arch.spec, self.dataset_api)
-                self.trained_arch_cnt += len(nbhd)
-                refined_nbhd = self._find_non_dominated_solutions(nbhd + [step_arch])
-                
-                for nei in refined_nbhd: 
-                    for ex_arch in self.archive: 
-                        if nei != ex_arch and self._is_dominated(ex_arch, nei):
-                            self.archive.remove(ex_arch)
-                            self.arch_hashes.remove(ex_arch.hash)
-                            if ex_arch in self.iter_queue:
-                                self.iter_queue.remove(ex_arch)
-                
-                for nei in refined_nbhd:
-                    if nei.hash not in self.arch_hashes:
-                        self.arch_hashes.add(nei.hash)
-                        self.archive.append(nei)
-                        self.iter_queue.append(nei)
-
-            #print(f"This is archive length for step {step+1}: {len(self.archive)}")
-        
-            step += 1
-            
-            self.history[step] = [copy.deepcopy(arch) for arch in self.archive]
-            
-        print(f"Total trained architectures: {self.trained_arch_cnt}")
-        
-        pareto_front = self._find_non_dominated_solutions(self.archive)
-
-        return pareto_front
-    
-    
-    def _find_non_dominated_solutions(self, pareto_front):
-        non_dominated_solutions = []
-
-        for sol1 in pareto_front:
-            is_dominated_by_others = False
-            for sol2 in pareto_front:
-                if sol1 != sol2 and self._is_dominated(sol1, sol2):
-                    is_dominated_by_others = True
-                    break
-
-            if not is_dominated_by_others:
-                non_dominated_solutions.append(sol1)
-
-        return non_dominated_solutions
-    
-    
-    @staticmethod
-    def _is_dominated(sol1, sol2):
-        """
-        Checks if sol1 dominated by the sol2.
-
-        Args:
-            sol1 (_type_)
-            sol2 (_type_)
-            
-        Returns:
-            bool
-        """
-        return sol2.val_accuracy >= sol1.val_accuracy and sol2.train_time <= sol1.train_time
-
 
 def load_models(train_time_path, acc_path):
     # Load the XGBoost model from the pickle file
@@ -133,7 +48,7 @@ def write_pls_history(pls: ParetoLocalSearch, path: Path, start_point_id: int) -
 
 def multi_surrogate_PLS(size_models: Dict,
                    dataset_api: Dict,
-                   pareto_steps:int,
+                   max_train_cnt:int,
                    starting_points:int,
                    min_max_dict: Dict,
                    result_dir: Path = Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis")
@@ -143,7 +58,7 @@ def multi_surrogate_PLS(size_models: Dict,
         surrogate_PLS(size_models=size_models,
                       dataset_api=dataset_api,
                       size=size,
-                      pareto_steps=pareto_steps,
+                      max_train_cnt=max_train_cnt,
                       starting_points=starting_points,
                       min_max_dict=min_max_dict,
                       result_dir=result_dir)
@@ -154,7 +69,7 @@ def multi_surrogate_PLS(size_models: Dict,
 def surrogate_PLS(size_models: Dict,
              dataset_api: Dict,
              size:int,
-             pareto_steps:int,
+             max_train_cnt:int,
              starting_points:int,
              min_max_dict: Dict,
              result_dir: Path = Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis")
@@ -174,7 +89,7 @@ def surrogate_PLS(size_models: Dict,
         print(f"Making surrogate MO for size {size} and seed {seed} and len(surrogate_front): {len(surrogate_front)}")
         make_PLS(search_res_dir=search_res_dir,
                  starting_archs=surrogate_front,
-                 pareto_steps=pareto_steps,
+                 max_train_cnt=max_train_cnt,
                  min_max_dict=min_max_dict,
                  )
         
@@ -189,18 +104,26 @@ def make_PLS(search_res_dir: Path, starting_archs: List[str], max_train_cnt: int
     paretos = []
     #min_max_dict = metrics.get_min_max_values(dataset_api["nb101_data"])
     trained_arch_cnt = 0
-    str_point_train_cnt = max_train_cnt // len(starting_archs)
+    pls_multi = {}
+    
     for i, arch in enumerate(starting_archs):
         starting_arch = ArchCoupled(arch, dataset_api["nb101_data"])
-        PLS = ParetoLocalSearch(starting_arch, str_point_train_cnt, dataset_api)
-        pareto_ls = PLS.search()
-        paretos += pareto_ls
-        trained_arch_cnt += PLS.trained_arch_cnt
-        write_pls_history(pls=PLS, path=search_res_dir, start_point_id=i+1)
+        pls_multi[i] = ParetoLocalSearch(starting_arch, 1, dataset_api)
+    trained_arch_cnt = 0
     
-    full_front = PLS._find_non_dominated_solutions(paretos)
+    while trained_arch_cnt < max_train_cnt:
+        for i, arch in enumerate(starting_archs):
+            pareto_ls = pls_multi[i].search()
+            paretos += pareto_ls
+        
+        trained_arch_cnt = sum([pls_multi[i].trained_arch_cnt for i in range(len(starting_archs))])
     
-    pareto_metrics = metrics.ParetoMetrics(full_front, min_max=min_max_dict, trained_arch_cnt=trained_arch_cnt)
+    for i in range(len(starting_archs)):
+        write_pls_history(pls_multi[i], search_res_dir, i+1)
+        
+    full_front = pls_multi[i]._find_non_dominated_solutions(paretos)
+    
+    pareto_metrics = metrics.ParetoMetrics(full_front, min_max=min_max_dict)
     
     write_pareto_metrics(pareto_metrics, path=search_res_dir)
     plot.plot_pareto_front(pareto_front=full_front, min_max=min_max_dict, path=search_res_dir / "pareto_front.png")
@@ -208,7 +131,7 @@ def make_PLS(search_res_dir: Path, starting_archs: List[str], max_train_cnt: int
     return trained_arch_cnt
     
 def run_surrogate_PLS(
-    pareto_steps:int, 
+    max_train_cnt:int, 
     starting_points:int,
     min_max_dict: Dict,
     model_dir: str = "../surrogates/models",
@@ -221,7 +144,7 @@ def run_surrogate_PLS(
     multi_surrogate_PLS(size_models=size_models,
                         dataset_api=dataset_api,
                         result_dir=result_dir,
-                        pareto_steps=pareto_steps,
+                        max_train_cnt=max_train_cnt,
                         min_max_dict=min_max_dict,
                         starting_points=starting_points
                         )
@@ -272,32 +195,29 @@ def multi_raw_MO_PLS(dataset_api: Dict, min_max_dict: Dict, random_seeds: List[i
 if __name__ == "__main__":
     dataset_api = get_dataset_api("nasbench101", "cifar10")
     min_max_dict=metrics.get_min_max_values(dataset_api["nb101_data"])
-    random_seeds = list(range(10,310,10))
-    size_models = get_size_models(model_dir="../surrogates/models")
-    raw_mo_steps = PARETO_STEPS
-    raw_mo_result_path = Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis/raw_mo") / str(raw_mo_steps)
-    surrogate_mo_result_path = Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis/surrogates") / str(PARETO_STEPS)
-    print(raw_mo_result_path)
+    random_seeds = list(range(10, 310, 10))
+    #size_models = get_size_models(model_dir="../surrogates/models/30_runs")
     
-    # We make 1 to 5 steps more for raw MO.
-    #for i in [0, 1, 2, 3, 4, 5]: 
-    #raw_mo_steps = PARETO_STEPS + i
-    raw_mo_max_train = 4000
-    raw_mo_result_path = Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis/raw_mo/") / str(raw_mo_max_train)
+    surr_train_cnt = 2000
+    surrogate_mo_result_path = Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis/surrogates") / "30_runs"
+    run_surrogate_PLS(
+        max_train_cnt=surr_train_cnt,
+        starting_points=STARTING_POINTS,
+        min_max_dict=min_max_dict,
+        result_dir=surrogate_mo_result_path,
+        model_dir=Path("../surrogates/models/30_runs")
+        )
+    
+    
+    """
+    raw_mo_train_cnt = 4000
+    raw_mo_result_path = Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis/raw_mo") / str(raw_mo_train_cnt)
     multi_raw_MO_PLS(dataset_api=dataset_api,
                     min_max_dict=min_max_dict,
                     random_seeds=random_seeds,
                     starting_points=STARTING_POINTS,
-                    max_train_cnt=raw_mo_max_train,
+                    max_train_cnt=raw_mo_train_cnt,
                     result_dir=raw_mo_result_path
                     )
+    """
     
-''' 
-    run_surrogate_PLS(
-        pareto_steps=PARETO_STEPS,
-        starting_points=STARTING_POINTS,
-        min_max_dict=min_max_dict,
-        result_dir=surrogate_mo_result_path,
-        model_dir=Path("../surrogates/models")
-        )
-'''
