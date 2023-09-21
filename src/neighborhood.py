@@ -20,7 +20,7 @@ def format_neighbors(neighbors, dataset_api):
     valid_neighbours = []
 
     for arch in neighbors: 
-        if arch.ops is not None:
+        if (arch.ops is not None) and (len(arch.ops) == NUM_VERTICES):
             arch.hash = arch.hash_spec(OPS)
             if arch.hash in dataset_api["nb101_data"].fixed_statistics:
                 coupled_arch = ArchCoupled(arch.hash, dataset_api=dataset_api["nb101_data"])

@@ -32,18 +32,6 @@ class ParetoLocalSearch:
         _is_dominated(sol1, sol2): Check if sol1 is dominated by sol2 based on validation accuracy and training time.
     """
     
-    def __init__(self, arch: object, iterations: int, dataset_api: dict) -> None:
-        self.base_arch = arch
-        self.iterations = iterations
-        self.dataset_api = dataset_api
-        self.archive = [arch]
-        self.iter_queue = deque(self.archive)
-        self.arch_hashes = set([self.base_arch.hash])
-        self.trained_arch_cnt = 0
-        self.history = {0: [arch]}
-    
-    # (Rest of the class implementation)
-
     def __init__(self, arch, iterations: int, dataset_api: Dict) -> None:
         self.base_arch = arch
         self.iterations = iterations

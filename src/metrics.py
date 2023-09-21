@@ -23,7 +23,9 @@ class ParetoMetrics:
         self.avg_hypervolume = self.hypervolume / len(pareto_front)
         self.diameter, self.podist_avg = self.get_diameter_podist_avg(pareto_front)
         self.best_acc = max([arch.val_accuracy for arch in pareto_front])
-        self.best_train_time = min([arch.train_time for arch in pareto_front])        
+        self.hash_best_acc = [arch.hash for arch in pareto_front if arch.val_accuracy == self.best_acc][0]
+        self.best_train_time = min([arch.train_time for arch in pareto_front])
+        self.hash_best_train_time = [arch.hash for arch in pareto_front if arch.train_time == self.best_train_time][0]        
         self.avg_acc = self.get_avg_acc(pareto_front)
         self.avg_train_time = self.get_avg_train_time(pareto_front)
         self.std_acc = self.get_std_acc(pareto_front)
