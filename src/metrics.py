@@ -81,6 +81,7 @@ class ParetoMetrics:
         norm_val_accuracy = normalize_values(values=val_accuracy, worst_value=min_max_dict['min_val_acc'], best_value=min_max_dict['max_val_acc'])
         # Shorter training time is better, so we invert the values.
         norm_train_time = scale_normalize(values=train_time, worst_value=min_max_dict['max_train_time'], best_value=min_max_dict['min_train_time'])
+        # In the reference point, I use 'max_train_time' as the y-value, since I normalize and inversely scale train time values.
         ref_point = np.array([1, min_max_dict['max_train_time']])
         norm_pareto_front = np.array(list(zip(norm_val_accuracy, norm_train_time)))
         hv_calculator = HV(ref_point=ref_point)

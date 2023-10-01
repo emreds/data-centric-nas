@@ -108,7 +108,6 @@ def make_PLS(search_res_dir: Path, starting_archs: List[str], max_train_cnt: int
     for i, arch in enumerate(starting_archs):
         starting_arch = ArchCoupled(arch, dataset_api["nb101_data"])
         pls_multi[i] = ParetoLocalSearch(starting_arch, 1, dataset_api)
-    trained_arch_cnt = 0
     
     while trained_arch_cnt < max_train_cnt:
         for i, arch in enumerate(starting_archs):
@@ -197,7 +196,7 @@ if __name__ == "__main__":
     min_max_dict=metrics.get_min_max_values(dataset_api["nb101_data"])
     
 
-    surr_train_cnt = 0
+    surr_train_cnt = 2000
     surrogate_mo_result_path = Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis/surrogates") / "30_runs" / str(surr_train_cnt)
     run_surrogate_PLS(
         max_train_cnt=surr_train_cnt,
@@ -207,8 +206,7 @@ if __name__ == "__main__":
         model_dir=Path("../surrogates/models/30_runs")
         )
     
-    """
-    
+  
     random_seeds = list(range(10, 310, 10))
     raw_mo_train_cnt = 2000
     raw_mo_result_path = Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis/raw_mo") / "30_runs" / str(raw_mo_train_cnt)
@@ -219,4 +217,3 @@ if __name__ == "__main__":
                     max_train_cnt=raw_mo_train_cnt,
                     result_dir=raw_mo_result_path
                     )
-    """
