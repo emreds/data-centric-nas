@@ -15,7 +15,6 @@ from naslib.utils import get_dataset_api
 from pls import ParetoLocalSearch
 from schema import ArchCoupled
 
-STARTING_POINTS = 20
 
 def write_pareto_metrics(pareto_metrics: metrics.ParetoMetrics, path: Path) -> None:
     
@@ -194,22 +193,22 @@ def multi_raw_MO_PLS(dataset_api: Dict, min_max_dict: Dict, random_seeds: List[i
 if __name__ == "__main__":
     dataset_api = get_dataset_api("nasbench101", "cifar10")
     min_max_dict=metrics.get_min_max_values(dataset_api["nb101_data"])
-    
+    STARTING_POINTS = 20
 
     surr_train_cnt = 2000
-    surrogate_mo_result_path = Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis/surrogates") / "30_runs" / str(surr_train_cnt)
+    surrogate_mo_result_path = Path("./analysis/surrogates") / "30_runs" / str(surr_train_cnt)
     run_surrogate_PLS(
         max_train_cnt=surr_train_cnt,
         starting_points=STARTING_POINTS,
         min_max_dict=min_max_dict,
         result_dir=surrogate_mo_result_path,
-        model_dir=Path("../surrogates/models/30_runs")
+        model_dir=Path("./surrogates/models/30_runs")
         )
     
   
     random_seeds = list(range(10, 310, 10))
     raw_mo_train_cnt = 2000
-    raw_mo_result_path = Path("/p/project/hai_nasb_eo/emre/data_centric/data-centric-nas/analysis/raw_mo") / "30_runs" / str(raw_mo_train_cnt)
+    raw_mo_result_path = Path("./analysis/raw_mo") / "30_runs" / str(raw_mo_train_cnt)
     multi_raw_MO_PLS(dataset_api=dataset_api,
                     min_max_dict=min_max_dict,
                     random_seeds=random_seeds,

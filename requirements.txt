@@ -1,0 +1,5 @@
+numpy
+pandas
+scipy
+pymoo
+# To install `naslib` -> https://github.com/automl/NASLib
